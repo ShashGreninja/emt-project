@@ -1,1 +1,3 @@
+**Abstract**
+
 This project focuses on the design, simulation, and performance analysis of a microstrip patch antenna operating at 1.8 GHz, developed and evaluated using MATLAB Antenna Toolbox. The design process involves precise impedance matching to ensure optimal power transfer and minimal reflection losses. Through iterative geometric optimization, the antenna was tuned to achieve accurate resonance at the target frequency. Furthermore, the radiation and beam patterns were simulated to evaluate directivity and gain characteristics. The study demonstrates a systematic approach to antenna modeling and highlights the significance of simulation-based design in modern wireless communication systems.
