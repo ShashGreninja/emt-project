@@ -1,0 +1,159 @@
+%Case 1: w = W/h<1 => narrow line, therefore larger impedance
+%case 2: w>1 => wide line
+ 
+%For narrow lines, the simple logarithmic model is accurate.
+ 
+%For wide lines, the fringing field model is better.
+ 
+%substrate used: FR4; Er = 4.4, the type of PCB substrate used (an industry
+%standard)[fiberglass-reinforced epoxy laminate]
+ 
+% narrower h => narrower W for same Zo, leading to fragile line and
+% difficulty to route
+ 
+%thicker h=> wider W, leading to more area
+ 
+%W/h around 1.5–2.5 is common for 50 Ω.
+% we need to solve for W, by using h and εr from formulas of Hammerstad/Pozar
+ 
+ 
+%W/h=1.926838
+ 
+ 
+ 
+% main script section 
+
+%  FAST 2.4 GHz RECTANGULAR PATCH ANTENNA (FR4)
+%  with automatic feed offset sweep for 50 Ω matching
+%  (5 frequency points, optimized for speed)
+% RECTANGULAR PATCH ANTENNA + 50Ω MICROSTRIP LINE (2.4 GHz)
+% Substrate: FR4 (εr = 4.4, h = 1.6 mm)
+
+clc; clear; close all;
+ 
+% PART 1 : Microstrip Line Design 
+% Goal: find the width (W) of a microstrip line that gives a desired impedance Z0
+ 
+h = 1.6e-3;          % substrate thickness (m)
+er = 4.4;            % dielectric constant of FR4
+Z0_target = 50;      % desired characteristic impedance (ohms)
+ 
+% Typical microstrip thickness/width ratio W/h ≈ 2 for 50Ω FR4
+W = find_W(h, er, Z0_target);
+ 
+% Table of Z0 vs W at given h
+lines = [];
+for Z = [40, 50, 60, 75]
+    h = 1.6e-3;
+    W = find_W(h, er, Z);
+    eps_eff = (er + 1)/2 + (er - 1)/2 * (1 + 12*h/W)^(-0.5);
+    lines = [lines; struct('h',h,'er',er,'Z0',Z,'W',W,'eps_eff',eps_eff)];
+end
+disp(struct2table(lines));
+ 
+figure;
+plot([lines.Z0], [lines.W]*1e3, 'LineWidth', 1.5);
+xlabel('Z0 (Ω)'); ylabel('Width (mm)');
+title('Microstrip Width vs Impedance for FR4 (h = 1.6 mm)');
+grid on;
+ 
+% Table of h vs W for Z0 = 50 Ω
+lines_50 = [];
+for h = [0.4e-3 0.8e-3 1.0e-3 1.6e-3 2.5e-3]
+    Z = 50;
+    W = find_W(h, er, Z);
+    eps_eff = (er + 1)/2 + (er - 1)/2 * (1 + 12*h/W)^(-0.5);
+    lines_50 = [lines_50; struct('h',h,'er',er,'Z0',Z,'W',W,'eps_eff',eps_eff)];
+end
+disp(struct2table(lines_50));
+ 
+figure;
+plot([lines_50.W]*1e3, [lines_50.h]*1e3, 'LineWidth', 1.5);
+xlabel('Width (mm)'); ylabel('Height (mm)');
+title('h vs W for 50Ω Line');
+grid on;
+ 
+% PART 2 : Microstrip 3D Model 
+L = 50e-3;     % line length (m)
+t = 35e-6;     % copper thickness (35 µm typical)
+ 
+figure('Color','w');
+hold on; axis equal; view(135,25);
+xlabel('Length (m)'); ylabel('Width (m)'); zlabel('Height (m)'); grid on;
+ 
+% Ground plane
+fill3([0 L L 0], [0 0 W*4 W*4], [0 0 0 0], [0.9 0.6 0.1], 'FaceAlpha',0.4);
+ 
+% Substrate block
+draw_substrate(30e-3, 20e-3, h, [0.8 0.8 0.9]);
+ 
+% Copper strip
+x = [0 L L 0];
+y = [W*1.5 W*1.5 W*2.5 W*2.5];
+z = [h h h+t h+t];
+fill3(x, y, z, [0.9 0.6 0.1], 'EdgeColor','none');
+ 
+title(sprintf('Microstrip Line: Z0=%.1fΩ, h=%.1f mm, W=%.2f mm', Z0_target, h*1e3, W*1e3));
+ 
+% PART 3 : Patch Antenna Model 
+% Define FR4 substrate correctly
+substrate = dielectric('Name','FR4','EpsilonR',4.4,'LossTangent',0.02,'Thickness',1.6e-3);
+ 
+% Create rectangular patch
+patch = patchMicrostrip('Substrate', substrate, ...
+    'GroundPlaneLength', 60e-3, ...
+    'GroundPlaneWidth',  60e-3, ...
+    'Length', 29e-3, ...  % patch length
+    'Width', 38e-3,  ...  % patch width
+    'Height', substrate.Thickness, ...
+    'FeedOffset', [8e-3 0]);   % feed offset from center
+ 
+figure;
+show(patch);
+title('Rectangular Microstrip Patch Antenna (FR4)');
+ 
+% PART 4 : Impedance & S11 
+freq = linspace(1e9, 4e9, 5);  % only 5 frequency points for speed
+ 
+% Impedance curve
+figure;
+impedance(patch, freq);
+title('Input Impedance of Patch Antenna');
+ 
+% Return loss (S11)
+figure;
+returnLoss(patch, freq);
+title('Return Loss (S_{11})');
+ 
+%% ---------------- PART 5 : Radiation Pattern ----------------
+% Quick 3D radiation pattern at 2.45 GHz
+figure;
+pattern(patch, 2.45e9);
+title('Far-field Radiation Pattern at 2.45 GHz');
+ 
+% Utility Functions 
+function W = find_W(h, er, Z0_target)
+    % FIND_W: Solve for microstrip width W for given Z0
+    fun = @(W) microstrip_Z0(W, h, er) - Z0_target;
+    W = fzero(fun, [1e-6, 100*h]);  % fast root-finding
+end
+ 
+function Z0 = microstrip_Z0(W, h, er)
+    wh = W / h;
+    eps_eff = (er + 1)/2 + (er - 1)/2 * (1 + 12/wh)^(-0.5);
+    if wh <= 1
+        Z0 = (60 / sqrt(eps_eff)) * log(8/wh + 0.25*wh);
+    else
+        Z0 = (120*pi) / (sqrt(eps_eff)*(wh + 1.393 + 0.667*log(wh + 1.444)));
+    end
+end
+ 
+function draw_substrate(L, W, h, color)
+    x = [0 L L 0];
+    y = [0 0 W W];
+    z0 = [0 0 0 0];
+    z1 = [h h h h];
+    fill3(x, y, z1, color, 'FaceAlpha',0.4, 'EdgeColor','none'); % top
+    fill3(x, y, z0, color, 'FaceAlpha',0.2, 'EdgeColor','none'); % bottom
+end
+ 
